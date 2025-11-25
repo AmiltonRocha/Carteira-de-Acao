@@ -10,6 +10,9 @@
 (def key-api "g967zghLxWPwMp72fdAaFU") ;; 
 (def api-url "https://brapi.dev/api/quote/") ;;brapi
 
+;; Atom para armazenar as transacoes em memoria
+(def transacoes (atom [])) ;; lista vazia inicialmente
+
 (defn buscar-dados-acao
   "Busca os dados de uma acao na API brapi.dev e retorna o resultado"
   [codigo-acao]
@@ -47,6 +50,22 @@
               (response/content-type "application/json; charset=utf-8")))) ;; ele manda a requisicao para o a brapi e retorna o json
   (POST "/compra" [] "Hello World")
   (route/not-found "Not Found"))
+
+(defn registra-compra
+  "Registra uma compra de acao e armazena no atom de transacoes"
+  [codigo quantidade preco]
+  (let [codigo-upper (.toUpperCase codigo) ;; converte o codigo para maiuscula
+        valor-total (* quantidade preco) ;; calcula o valor total da compra
+        data-atual (str (java.time.LocalDate/now)) ;; obtem a data atual
+        transacao {:tipo "compra"
+                   :codigo codigo-upper
+                   :quantidade quantidade
+                   :preco-unitario preco
+                   :valor-total valor-total
+                   :data data-atual}]
+    (swap! transacoes conj transacao) ;; adiciona a transacao ao atom
+    transacao)) ;; retorna a transacao criada
+
 
 
 (def app
