@@ -48,7 +48,29 @@
               json/generate-string ;; aqui esta gerando uma string com o json
               response/response ;; com a resposta da api pegamos o body e transformamos em json
               (response/content-type "application/json; charset=utf-8")))) ;; ele manda a requisicao para o a brapi e retorna o json
-  (POST "/compra" [] "Hello World")
+  (POST "/compra" {body :body}
+    (try
+      (let [dados (json/parse-string (slurp body) true)
+            codigo (:codigo dados)
+           quantidade (:quantidade dados)
+            preco (:preco dados)
+            transacao (registra-compra codigo quantidade preco)]
+        (-> transacao
+            json/generate-string
+            response/response
+            (response/content-type "application/json; charset=utf-8")
+            (response/status 201)))
+      (catch Exception _
+        (-> {:erro "Dados invalidos. Envie: codigo, quantidade e preco"}
+            json/generate-string
+            response/response
+            (response/content-type "application/json; charset=utf-8")
+            (response/status 400)))))
+  (GET "/transacoes" []
+    (-> @transacoes
+        json/generate-string
+        response/response
+        (response/content-type "application/json; charset=utf-8")))
   (route/not-found "Not Found"))
 
 (defn registra-compra
