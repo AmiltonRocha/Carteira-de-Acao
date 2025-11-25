@@ -4,7 +4,7 @@
             [cheshire.core :as json]) ;; biblioteca para parsear JSON
   (:gen-class))
 
-(def api-local-url "http://localhost:3001") ;; URL da API local
+(def api-local-url "http://localhost:3000") ;; URL da API local
 
 
 ;;# Consultar uma ação específica

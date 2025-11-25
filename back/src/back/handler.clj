@@ -34,14 +34,17 @@
           preco-de-abertura (:regularMarketOpen resultado)
           preco-de-fechamento (:regularMarketPreviousClose resultado)
           hora (:regularMarketTime resultado)]
-          (response/response {:codigo codigo
-                              :nome nome
-                              :ultimo-preco ultimo-preco
-                              :preco-maximo-do-dia preco-maximo-do-dia
-                              :preco-minimo-do-dia preco-minimo-do-dia
-                              :preco-de-abertura preco-de-abertura
-                              :preco-de-fechamento preco-de-fechamento
-                              :hora hora})))
+          (-> {:codigo codigo
+               :nome nome
+               :ultimo-preco ultimo-preco
+               :preco-maximo-do-dia preco-maximo-do-dia
+               :preco-minimo-do-dia preco-minimo-do-dia
+               :preco-de-abertura preco-de-abertura
+               :preco-de-fechamento preco-de-fechamento
+               :hora hora}
+              json/generate-string ;; aqui esta gerando uma string com o json
+              response/response ;; com a resposta da api pegamos o body e transformamos em json
+              (response/content-type "application/json; charset=utf-8")))) ;; ele manda a requisicao para o a brapi e retorna o json
   (POST "/compra" [] "Hello World")
   (route/not-found "Not Found"))
 
