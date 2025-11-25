@@ -123,6 +123,8 @@
         transacao)
       {:erro (str "Saldo insuficiente. Voce possui " saldo-atual " acoes de " codigo-upper " e tentou vender " quantidade)})))
 
+;;(defn extrato-por-periudo [])
+
 
 (def app
   (wrap-defaults app-routes site-defaults))

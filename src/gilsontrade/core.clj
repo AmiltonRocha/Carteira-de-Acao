@@ -7,8 +7,11 @@
 (def api-local-url "http://localhost:3000") ;; URL da API local
 
 
-;;# Consultar uma ação específica
-;;lein run PETR4
+
+
+
+
+
 
 
 
