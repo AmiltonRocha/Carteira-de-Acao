@@ -88,6 +88,40 @@
     (swap! transacoes conj transacao) ;; adiciona a transacao ao atom
     transacao)) ;; retorna a transacao criada
 
+(defn calcular-saldo-acoes
+  "Calcula quantas acoes de um codigo especifico o usuario possui"
+  [codigo]
+  (let [codigo-upper (.toUpperCase codigo)
+        compras (filter #(and (= (:tipo %) "compra")
+                              (= (:codigo %) codigo-upper))
+                        @transacoes)
+        vendas (filter #(and (= (:tipo %) "venda")
+                             (= (:codigo %) codigo-upper))
+                       @transacoes)
+        total-compras (reduce + 0 (map :quantidade compras))
+        total-vendas (reduce + 0 (map :quantidade vendas))]
+    (- total-compras total-vendas)))
+
+(defn registra-venda
+  "Registra uma venda de acao e armazena no atom de transacoes"
+  [codigo quantidade]
+  (let [codigo-upper (.toUpperCase codigo)
+        saldo-atual (calcular-saldo-acoes codigo-upper)
+        dados-acao (buscar-dados-acao codigo-upper)
+        preco-atual (:regularMarketPrice dados-acao)
+        valor-total (* quantidade preco-atual)
+        data-atual (str (java.time.LocalDate/now))
+        transacao {:tipo "venda"
+                   :codigo codigo-upper
+                   :quantidade quantidade
+                   :preco-unitario preco-atual
+                   :valor-total valor-total
+                   :data data-atual}]
+    (if (>= saldo-atual quantidade)
+      (do
+        (swap! transacoes conj transacao)
+        transacao)
+      {:erro (str "Saldo insuficiente. Voce possui " saldo-atual " acoes de " codigo-upper " e tentou vender " quantidade)})))
 
 
 (def app
