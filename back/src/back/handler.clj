@@ -24,55 +24,6 @@
         resultado (first (:results dados-json))] ;; pega o primeiro resultado do array de resultados
     resultado)) ;; retorna o resultado (sem imprimir)
 
-(defroutes app-routes 
-  "Rotas da aplicacao"
-
-  (GET "/acao/:codigo" [codigo] 
-    (let [resultado (buscar-dados-acao codigo)
-          codigo (:symbol resultado)
-          nome (:longName resultado)
-          ultimo-preco (:regularMarketPrice resultado)
-          preco-maximo-do-dia (:regularMarketDayHigh resultado)
-          preco-minimo-do-dia (:regularMarketDayLow resultado)
-          preco-de-abertura (:regularMarketOpen resultado)
-          preco-de-fechamento (:regularMarketPreviousClose resultado)
-          hora (:regularMarketTime resultado)]
-          (-> {:codigo codigo
-               :nome nome
-               :ultimo-preco ultimo-preco
-               :preco-maximo-do-dia preco-maximo-do-dia
-               :preco-minimo-do-dia preco-minimo-do-dia
-               :preco-de-abertura preco-de-abertura
-               :preco-de-fechamento preco-de-fechamento
-               :hora hora}
-              json/generate-string ;; aqui esta gerando uma string com o json
-              response/response ;; com a resposta da api pegamos o body e transformamos em json
-              (response/content-type "application/json; charset=utf-8")))) ;; ele manda a requisicao para o a brapi e retorna o json
-  (POST "/compra" {body :body}
-    (try
-      (let [dados (json/parse-string (slurp body) true)
-            codigo (:codigo dados)
-           quantidade (:quantidade dados)
-            preco (:preco dados)
-            transacao (registra-compra codigo quantidade preco)]
-        (-> transacao
-            json/generate-string
-            response/response
-            (response/content-type "application/json; charset=utf-8")
-            (response/status 201)))
-      (catch Exception _
-        (-> {:erro "Dados invalidos. Envie: codigo, quantidade e preco"}
-            json/generate-string
-            response/response
-            (response/content-type "application/json; charset=utf-8")
-            (response/status 400)))))
-  (GET "/transacoes" []
-    (-> @transacoes
-        json/generate-string
-        response/response
-        (response/content-type "application/json; charset=utf-8")))
-  (route/not-found "Not Found"))
-
 (defn registra-compra
   "Registra uma compra de acao e armazena no atom de transacoes"
   [codigo quantidade preco]
@@ -122,6 +73,55 @@
         (swap! transacoes conj transacao)
         transacao)
       {:erro (str "Saldo insuficiente. Voce possui " saldo-atual " acoes de " codigo-upper " e tentou vender " quantidade)})))
+
+(defroutes app-routes 
+  "Rotas da aplicacao"
+
+  (GET "/acao/:codigo" [codigo] 
+    (let [resultado (buscar-dados-acao codigo)
+          codigo (:symbol resultado)
+          nome (:longName resultado)
+          ultimo-preco (:regularMarketPrice resultado)
+          preco-maximo-do-dia (:regularMarketDayHigh resultado)
+          preco-minimo-do-dia (:regularMarketDayLow resultado)
+          preco-de-abertura (:regularMarketOpen resultado)
+          preco-de-fechamento (:regularMarketPreviousClose resultado)
+          hora (:regularMarketTime resultado)]
+          (-> {:codigo codigo
+               :nome nome
+               :ultimo-preco ultimo-preco
+               :preco-maximo-do-dia preco-maximo-do-dia
+               :preco-minimo-do-dia preco-minimo-do-dia
+               :preco-de-abertura preco-de-abertura
+               :preco-de-fechamento preco-de-fechamento
+               :hora hora}
+              json/generate-string ;; aqui esta gerando uma string com o json
+              response/response ;; com a resposta da api pegamos o body e transformamos em json
+              (response/content-type "application/json; charset=utf-8")))) ;; ele manda a requisicao para o a brapi e retorna o json
+  (POST "/compra" {body :body}
+    (try
+      (let [dados (json/parse-string (slurp body) true)
+            codigo (:codigo dados)
+           quantidade (:quantidade dados)
+            preco (:preco dados)
+            transacao (registra-compra codigo quantidade preco)]
+        (-> transacao
+            json/generate-string
+            response/response
+            (response/content-type "application/json; charset=utf-8")
+            (response/status 201)))
+      (catch Exception _
+        (-> {:erro "Dados invalidos. Envie: codigo, quantidade e preco"}
+            json/generate-string
+            response/response
+            (response/content-type "application/json; charset=utf-8")
+            (response/status 400)))))
+  (GET "/transacoes" []
+    (-> @transacoes
+        json/generate-string
+        response/response
+        (response/content-type "application/json; charset=utf-8")))
+  (route/not-found "Not Found"))
 
 ;;(defn extrato-por-periudo [])
 
