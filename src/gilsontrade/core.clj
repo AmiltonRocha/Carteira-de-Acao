@@ -27,30 +27,34 @@
   [codigo quantidade]
   (try
     (let [dados-acao (buscar-dados-acao codigo)]
-      (if-let [preco-atual (:ultimo-preco dados-acao)]
-        (let [url (str api-local-url "/compra")
-              dados-json (json/generate-string {:codigo codigo
-                                                :quantidade quantidade
-                                                :preco preco-atual})
-              response (http-client/post url {:body dados-json
-                                             :content-type "application/json"
-                                             :accept :json
-                                             :throw-exceptions false})
-              status (:status response)]
-          (if (= status 201)
-            (try
-              (let [resultado (json/parse-string (:body response) true)]
-                resultado)
-              (catch Exception e
-                {:erro (str "Erro ao processar resposta do servidor: " (.getMessage e))}))
-            (if-let [body (:body response)]
+      (if (and dados-acao (not (:erro dados-acao)))
+        (if-let [preco-atual (:ultimo-preco dados-acao)]
+          (let [url (str api-local-url "/compra")
+                dados-json (json/generate-string {:codigo codigo
+                                                  :quantidade quantidade
+                                                  :preco preco-atual})
+                response (http-client/post url {:body dados-json
+                                               :content-type "application/json"
+                                               :accept :json
+                                               :throw-exceptions false})
+                status (:status response)]
+            (if (= status 201)
               (try
-                (let [erro (json/parse-string body true)]
-                  erro)
+                (let [resultado (json/parse-string (:body response) true)]
+                  resultado)
                 (catch Exception e
-                  {:erro (str "Erro HTTP " status ". Resposta: " (subs body 0 (min 200 (count body))))}))
-              {:erro (str "Erro HTTP " status ". Sem resposta do servidor.")})))
-        {:erro "Erro ao obter preco da acao. Verifique se o codigo esta correto."}))
+                  {:erro (str "Erro ao processar resposta do servidor: " (.getMessage e))}))
+              (if-let [body (:body response)]
+                (try
+                  (let [erro (json/parse-string body true)]
+                    erro)
+                  (catch Exception e
+                    {:erro (str "Erro HTTP " status ". Resposta: " (subs body 0 (min 200 (count body))))}))
+                {:erro (str "Erro HTTP " status ". Sem resposta do servidor.")})))
+          {:erro (str "Preco da acao nao disponivel. Dados recebidos: " (pr-str dados-acao))})
+        (if-let [erro (:erro dados-acao)]
+          {:erro erro}
+          {:erro "Erro ao buscar dados da acao. Tente novamente."})))
     (catch Exception e
       {:erro (str "Erro ao conectar com o servidor: " (.getMessage e))})))
 

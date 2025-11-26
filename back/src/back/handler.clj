@@ -14,15 +14,24 @@
 (def transacoes (atom [])) ;; lista vazia inicialmente
 
 (defn buscar-dados-acao
-  "Busca os dados de uma acao na API brapi.dev e retorna o resultado"
+  "Busca os dados de uma acao na API brapi.dev e retorna o resultado ou mapa com erro"
   [codigo-acao]
   (let [codigo (.toUpperCase codigo-acao) ;; isso deixa o codigo da acao em maiuscula
         url-completa (str api-url codigo) ;; isso completa a url com o codigo da acao
         response (http-client/get url-completa {:headers {"Authorization" (str "Bearer " key-api)} ;; adiciona o token no header
                                                 :throw-exceptions false}) ;; aqui e a onde faz o get la na api
-        dados-json (json/parse-string (:body response) true) ;; Traducao do formato da api para o formato do clojure
-        resultado (first (:results dados-json))] ;; pega o primeiro resultado do array de resultados
-    resultado)) ;; retorna o resultado (sem imprimir)
+        status (:status response)
+        body (:body response)]
+    (if (= status 200)
+      (try
+        (let [dados-json (json/parse-string body true)
+              results (:results dados-json)]
+          (if (and results (seq results))
+            (first results) ;; pega o primeiro resultado do array
+            {:erro-api (str "Acao " codigo " nao encontrada na API brapi.dev")}))
+        (catch Exception e
+          {:erro-api (str "Erro ao processar resposta da API: " (.getMessage e))}))
+      {:erro-api (str "Erro HTTP " status " ao acessar API brapi.dev. Verifique se o codigo " codigo " esta correto.")})))
 
 (defn registra-compra
   "Registra uma compra de acao e armazena no atom de transacoes"
@@ -78,16 +87,22 @@
   "Rotas da aplicacao"
 
   (GET "/acao/:codigo" [codigo] 
-    (let [resultado (buscar-dados-acao codigo)
-          codigo (:symbol resultado)
-          nome (:longName resultado)
-          ultimo-preco (:regularMarketPrice resultado)
-          preco-maximo-do-dia (:regularMarketDayHigh resultado)
-          preco-minimo-do-dia (:regularMarketDayLow resultado)
-          preco-de-abertura (:regularMarketOpen resultado)
-          preco-de-fechamento (:regularMarketPreviousClose resultado)
-          hora (:regularMarketTime resultado)]
-          (-> {:codigo codigo
+    (let [resultado (buscar-dados-acao codigo)]
+      (if-let [erro (:erro-api resultado)]
+        (-> {:erro erro}
+            json/generate-string
+            response/response
+            (response/content-type "application/json; charset=utf-8")
+            (response/status 404))
+        (let [codigo-symbol (:symbol resultado)
+              nome (:longName resultado)
+              ultimo-preco (:regularMarketPrice resultado)
+              preco-maximo-do-dia (:regularMarketDayHigh resultado)
+              preco-minimo-do-dia (:regularMarketDayLow resultado)
+              preco-de-abertura (:regularMarketOpen resultado)
+              preco-de-fechamento (:regularMarketPreviousClose resultado)
+              hora (:regularMarketTime resultado)]
+          (-> {:codigo codigo-symbol
                :nome nome
                :ultimo-preco ultimo-preco
                :preco-maximo-do-dia preco-maximo-do-dia
@@ -95,9 +110,9 @@
                :preco-de-abertura preco-de-abertura
                :preco-de-fechamento preco-de-fechamento
                :hora hora}
-              json/generate-string ;; aqui esta gerando uma string com o json
-              response/response ;; com a resposta da api pegamos o body e transformamos em json
-              (response/content-type "application/json; charset=utf-8")))) ;; ele manda a requisicao para o a brapi e retorna o json
+              json/generate-string
+              response/response
+              (response/content-type "application/json; charset=utf-8"))))))
   (POST "/compra" {body :body}
     (try
       (let [dados (json/parse-string (slurp body) true)
