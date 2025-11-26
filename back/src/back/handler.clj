@@ -2,7 +2,7 @@
   {:clj-kondo/ignore [:unresolved-symbol :unused-referred-var :refer-all]} ;; aqui e paradesabilitar o linter
   (:require [compojure.core :refer :all] ; no-linter
             [compojure.route :as route]
-            [ring.middleware.defaults :refer [wrap-defaults site-defaults]]
+            [ring.middleware.defaults :refer [wrap-defaults site-defaults api-defaults]]
             [clj-http.client :as http-client] ;; biblioteca para fazer requisicoes HTTP
             [cheshire.core :as json] ;; biblioteca para parsear JSON
             [ring.util.response :as response])) ;; biblioteca para respostas HTTP
@@ -127,4 +127,4 @@
 
 
 (def app
-  (wrap-defaults app-routes site-defaults))
+  (wrap-defaults app-routes api-defaults))
