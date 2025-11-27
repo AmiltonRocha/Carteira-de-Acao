@@ -12,6 +12,7 @@
 
 ;; Atom para armazenar as transacoes em memoria
 (def transacoes (atom [])) ;; lista vazia inicialmente
+;;criar uma lista de atons para poder fazer uma lista 
 
 (defn buscar-dados-acao
   "Busca os dados de uma acao na API brapi.dev e retorna o resultado ou mapa com erro"
@@ -138,7 +139,7 @@
         (response/content-type "application/json; charset=utf-8")))
   (route/not-found "Not Found"))
 
-;;(defn extrato-por-periudo [])
+;;(defn extrato-por-periudo [] vai precisar de uma data inicial e uma final)
 
 
 (def app
