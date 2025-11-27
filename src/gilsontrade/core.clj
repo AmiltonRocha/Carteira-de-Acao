@@ -24,7 +24,7 @@
 
 (defn registrar-compra
   "Registra uma compra de acao"
-  [codigo quantidade]
+  [codigo quantidade data]
   (try
     (let [dados-acao (buscar-dados-acao codigo)]
       (if (and dados-acao (not (:erro dados-acao)))
@@ -32,7 +32,8 @@
           (let [url (str api-local-url "/compra")
                 dados-json (json/generate-string {:codigo codigo
                                                   :quantidade quantidade
-                                                  :preco preco-atual})
+                                                  :preco preco-atual
+                                                  :data data})
                 response (http-client/post url {:body dados-json
                                                :content-type "application/json"
                                                :accept :json
@@ -100,17 +101,20 @@
                       (flush)
                       (try
                         (let [quantidade-str (read-line)
-                              quantidade (Double/parseDouble quantidade-str)
-                              resultado (registrar-compra codigo quantidade)]
-                          (if-let [erro (:erro resultado)]
-                            (println "\nErro:" erro)
-                            (do
-                              (println "\nCompra registrada com sucesso!")
-                              (println "Codigo:" (:codigo resultado))
-                              (println "Quantidade:" (:quantidade resultado))
-                              (println "Preco Unitario: R$" (:preco-unitario resultado))
-                              (println "Valor Total: R$" (:valor-total resultado))
-                              (println "Data:" (:data resultado)))))
+                              quantidade (Double/parseDouble quantidade-str)]
+                          (print "Digite a data da compra (formato: YYYY-MM-DD, ex: 2024-01-15): ")
+                          (flush)
+                          (let [data (read-line)
+                                resultado (registrar-compra codigo quantidade data)]
+                            (if-let [erro (:erro resultado)]
+                              (println "\nErro:" erro)
+                              (do
+                                (println "\nCompra registrada com sucesso!")
+                                (println "Codigo:" (:codigo resultado))
+                                (println "Quantidade:" (:quantidade resultado))
+                                (println "Preco Unitario: R$" (:preco-unitario resultado))
+                                (println "Valor Total: R$" (:valor-total resultado))
+                                (println "Data:" (:data resultado))))))
                         (catch NumberFormatException _
                           (println "\nErro: Quantidade invalida. Digite um numero valido."))
                         (catch Exception ex

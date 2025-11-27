@@ -36,16 +36,17 @@
 
 (defn registra-compra
   "Registra uma compra de acao e armazena no atom de transacoes"
-  [codigo quantidade preco]
+  [codigo quantidade preco data]
   (let [codigo-upper (.toUpperCase codigo) ;; converte o codigo para maiuscula
         valor-total (* quantidade preco) ;; calcula o valor total da compra
-        data-atual (str (java.time.LocalDate/now)) ;; obtem a data atual
+        ;; Usa a data fornecida, ou data atual se nao fornecida
+        data-compra (if data data (str (java.time.LocalDate/now)))
         transacao {:tipo "compra"
                    :codigo codigo-upper
                    :quantidade quantidade
                    :preco-unitario preco
                    :valor-total valor-total
-                   :data data-atual}]
+                   :data data-compra}]
     (swap! transacoes conj transacao) ;; adiciona a transacao ao atom
     transacao)) ;; retorna a transacao criada
 
@@ -84,6 +85,18 @@
         transacao)
       {:erro (str "Saldo insuficiente. Voce possui " saldo-atual " acoes de " codigo-upper " e tentou vender " quantidade)})))
 
+(defn extrato-por-periodo
+  "Filtra transacoes entre uma data inicial e uma data final (formato: YYYY-MM-DD)"
+  [data-inicial data-final]
+  (let [todas-transacoes @transacoes
+        ;; Filtra transacoes cuja data esta entre data-inicial e data-final (inclusive)
+        transacoes-filtradas (filter (fn [transacao]
+                                       (let [data-transacao (:data transacao)]
+                                         (and (>= (compare data-transacao data-inicial) 0)
+                                              (<= (compare data-transacao data-final) 0))))
+                                     todas-transacoes)]
+    transacoes-filtradas))
+
 (defroutes app-routes 
   "Rotas da aplicacao"
 
@@ -118,16 +131,17 @@
     (try
       (let [dados (json/parse-string (slurp body) true)
             codigo (:codigo dados)
-           quantidade (:quantidade dados)
+            quantidade (:quantidade dados)
             preco (:preco dados)
-            transacao (registra-compra codigo quantidade preco)]
+            data (:data dados)  ;; Extrai a data do body (opcional)
+            transacao (registra-compra codigo quantidade preco data)]
         (-> transacao
             json/generate-string
             response/response
             (response/content-type "application/json; charset=utf-8")
             (response/status 201)))
       (catch Exception _
-        (-> {:erro "Dados invalidos. Envie: codigo, quantidade e preco"}
+        (-> {:erro "Dados invalidos. Envie: codigo, quantidade, preco e data (formato: YYYY-MM-DD)"}
             json/generate-string
             response/response
             (response/content-type "application/json; charset=utf-8")
@@ -137,10 +151,22 @@
         json/generate-string
         response/response
         (response/content-type "application/json; charset=utf-8")))
+  
+  (GET "/transacoes/periodo" {query-params :query-params}
+    (let [data-inicial (get query-params "data-inicial")
+          data-final (get query-params "data-final")]
+      (if (and data-inicial data-final)
+        (let [transacoes-filtradas (extrato-por-periodo data-inicial data-final)]
+          (-> transacoes-filtradas
+              json/generate-string
+              response/response
+              (response/content-type "application/json; charset=utf-8")))
+        (-> {:erro "Parametros obrigatorios: data-inicial e data-final (formato: YYYY-MM-DD)"}
+            json/generate-string
+            response/response
+            (response/content-type "application/json; charset=utf-8")
+            (response/status 400)))))
   (route/not-found "Not Found"))
-
-;;(defn extrato-por-periudo [] vai precisar de uma data inicial e uma final)
-
 
 (def app
   (wrap-defaults app-routes api-defaults))
