@@ -6,7 +6,7 @@
 
 (def api-local-url "http://localhost:3000") ;; URL da API local
 
-(defn buscar-dados-acao
+(defn buscar-dados-acao 
   "Consulta os dados de uma acao na API local"
   [codigo]
   (let [url (str api-local-url "/acao/" codigo)
