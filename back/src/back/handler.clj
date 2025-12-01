@@ -34,6 +34,24 @@
           {:erro-api (str "Erro ao processar resposta da API: " (.getMessage e))}))
       {:erro-api (str "Erro HTTP " status " ao acessar API brapi.dev. Verifique se o codigo " codigo " esta correto.")})))
 
+(defn converter-para-numero
+  "Converte um valor para numero (double), aceita string, number ou tipos numericos do Java"
+  [valor]
+  (cond
+    (nil? valor)
+    nil
+    (string? valor)
+    (try
+      (Double/parseDouble valor)
+      (catch Exception _
+        nil))
+    (number? valor)
+    (double valor)
+    (instance? Number valor)
+    (double valor)
+    :else
+    nil))
+
 (defn calcular-valor-total
   "Calcula o valor total de uma transacao "
   [quantidade preco-unitario]
@@ -132,29 +150,41 @@
 (defn registra-venda
   "Registra uma venda de acao e armazena no atom de transacoes"
   [codigo quantidade data]
-  (let [codigo-upper (.toUpperCase codigo)
-        ;; Usa a data fornecida, ou data atual se nao fornecida
-        data-venda (if data data (str (java.time.LocalDate/now)))
-        ;; Valida se a data da venda nao e anterior a data da compra mais antiga
-        data-compra-antiga (data-compra-mais-antiga-wrapper codigo-upper)]
-    ;; Primeiro valida se existe compra e se a data da venda e valida
-    (if (not (data-venda-valida? data-venda data-compra-antiga))
-      {:erro (str "Nao e possivel vender antes da data de compra. Data da compra mais antiga: " data-compra-antiga "")}
-      (let [saldo-atual (calcular-saldo-acoes codigo-upper)
-            dados-acao (buscar-dados-acao codigo-upper)
-            preco-atual (:regularMarketPrice dados-acao)
-            valor-total (calcular-valor-total quantidade preco-atual)
-            transacao {:tipo "venda"
-                       :codigo codigo-upper
-                       :quantidade quantidade
-                       :preco-unitario preco-atual
-                       :valor-total valor-total
-                       :data data-venda}]
-        (if (>= saldo-atual quantidade)
-          (do
-            (swap! transacoes conj transacao)
-            transacao)
-          {:erro (str "Saldo insuficiente. Voce possui " saldo-atual " acoes de " codigo-upper " e tentou vender " quantidade)})))))
+  ;; Valida se quantidade e um numero valido
+  (if (not (and (number? quantidade) (> quantidade 0)))
+    {:erro (str "Quantidade invalida. Deve ser um numero maior que zero. Recebido: " quantidade " (tipo: " (type quantidade) ")")}
+    (let [codigo-upper (.toUpperCase codigo)
+          ;; Garante que quantidade seja double
+          quantidade-num (double quantidade)
+          ;; Usa a data fornecida, ou data atual se nao fornecida
+          data-venda (if data data (str (java.time.LocalDate/now)))
+          ;; Valida se a data da venda nao e anterior a data da compra mais antiga DA ACAO ESPECIFICA
+          data-compra-antiga (data-compra-mais-antiga-wrapper codigo-upper)]
+    ;; Primeiro valida se existe compra da acao especifica
+    (if (nil? data-compra-antiga)
+      {:erro (str "Nao e possivel vender " codigo-upper " sem ter comprado antes. Registre uma compra primeiro.")}
+      ;; Valida se a data da venda nao e anterior a data da compra mais antiga DA ACAO ESPECIFICA
+      (if (not (data-venda-valida? data-venda data-compra-antiga))
+        {:erro (str "Nao e possivel vender " codigo-upper " antes da data de compra. Data da compra mais antiga de " codigo-upper ": " data-compra-antiga "")}
+        (let [saldo-atual (calcular-saldo-acoes codigo-upper)
+              dados-acao (buscar-dados-acao codigo-upper)]
+        (if (or (nil? dados-acao) (:erro-api dados-acao))
+          {:erro (str "Erro ao buscar dados da acao " codigo-upper ". Tente novamente.")}
+          (let [preco-atual (:regularMarketPrice dados-acao)]
+            (if (nil? preco-atual)
+              {:erro (str "Preco da acao " codigo-upper " nao disponivel. Tente novamente.")}
+              (let [valor-total (calcular-valor-total quantidade-num preco-atual)
+                    transacao {:tipo "venda"
+                               :codigo codigo-upper
+                               :quantidade quantidade-num
+                               :preco-unitario preco-atual
+                               :valor-total valor-total
+                               :data data-venda}]
+                (if (>= saldo-atual quantidade-num)
+                  (do
+                    (swap! transacoes conj transacao)
+                    transacao)
+                  {:erro (str "Saldo insuficiente. Voce possui " saldo-atual " acoes de " codigo-upper " e tentou vender " quantidade-num)})))))))))))
 
 (defn extrato-por-periodo
   "Filtra transacoes entre uma data inicial e uma data final (formato: YYYY-MM-DD)"
@@ -220,9 +250,11 @@
       (let [body-str (if (string? body) body (slurp body))
             dados (json/parse-string body-str true)
             codigo (:codigo dados)
-            quantidade (:quantidade dados)
-            data (:data dados)]  ;; Extrai a data do body (opcional)
-        (if (and codigo quantidade data)
+            quantidade-raw (:quantidade dados)
+            data (:data dados)
+            ;; Converte quantidade para numero usando funcao auxiliar
+            quantidade (converter-para-numero quantidade-raw)]  ;; Extrai a data do body (opcional)
+        (if (and codigo quantidade data (number? quantidade) (> quantidade 0))
           (let [transacao (registra-venda codigo quantidade data)]
             (if-let [erro (:erro transacao)]
               (-> {:erro erro}
@@ -235,7 +267,7 @@
                   response/response
                   (response/content-type "application/json; charset=utf-8")
                   (response/status 201))))
-          (-> {:erro "Dados invalidos. Envie: codigo, quantidade e data (formato: YYYY-MM-DD)"}
+          (-> {:erro (str "Dados invalidos. Envie: codigo, quantidade (numero > 0) e data (formato: YYYY-MM-DD). Recebido - codigo: " codigo ", quantidade: " quantidade-raw " (" (type quantidade-raw) "), data: " data)}
               json/generate-string
               response/response
               (response/content-type "application/json; charset=utf-8")
