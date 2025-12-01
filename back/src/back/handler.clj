@@ -35,43 +35,38 @@
       {:erro-api (str "Erro HTTP " status " ao acessar API brapi.dev. Verifique se o codigo " codigo " esta correto.")})))
 
 (defn calcular-valor-total
-  "Calcula o valor total de uma transacao (funcao pura)"
+  "Calcula o valor total de uma transacao "
   [quantidade preco-unitario]
   (* quantidade preco-unitario))
 
 (defn filtrar-transacoes
-  "Filtra transacoes por codigo e tipo (funcao pura)"
+  "Filtra transacoes por codigo e tipo "
   [transacoes codigo tipo]
   (let [codigo-upper (.toUpperCase codigo)]
     (filter #(and (= (:tipo %) tipo)
                   (= (:codigo %) codigo-upper))
             transacoes)))
 
-(defn data-anterior?
-  "Verifica se data1 e anterior a data2 (funcao pura)"
-  [data1 data2]
-  (< (compare data1 data2) 0))
-
 (defn data-posterior-ou-igual?
-  "Verifica se data1 e posterior ou igual a data2 (funcao pura)"
+  "Verifica se data1 e posterior ou igual a data2 "
   [data1 data2]
   (>= (compare data1 data2) 0))
 
 (defn data-entre?
-  "Verifica se data esta entre data-inicial e data-final (inclusive) (funcao pura)"
+  "Verifica se data esta entre data-inicial e data-final (inclusive) "
   [data data-inicial data-final]
   (and (data-posterior-ou-igual? data data-inicial)
        (data-posterior-ou-igual? data-final data)))
 
 (defn data-venda-valida?
-  "Valida se a data da venda e valida em relacao a data da compra mais antiga (funcao pura)"
+  "Valida se a data da venda e valida em relacao a data da compra mais antiga "
   [data-venda data-compra-antiga]
   (if data-compra-antiga
     (data-posterior-ou-igual? data-venda data-compra-antiga)
     true))  ; Se nao ha compra, permite vender
 
 (defn calcular-saldo-acoes-puro
-  "Calcula o saldo de acoes a partir de uma lista de transacoes (funcao pura)"
+  "Calcula o saldo de acoes a partir de uma lista de transacoes "
   [transacoes codigo]
   (let [codigo-upper (.toUpperCase codigo)
         compras (filtrar-transacoes transacoes codigo-upper "compra")
@@ -81,7 +76,7 @@
     (- total-compras total-vendas)))
 
 (defn data-compra-mais-antiga
-  "Retorna a data da compra mais antiga de uma acao a partir de uma lista de transacoes (funcao pura)"
+  "Retorna a data da compra mais antiga de uma acao a partir de uma lista de transacoes "
   [transacoes codigo]
   (let [codigo-upper (.toUpperCase codigo)
         compras (filtrar-transacoes transacoes codigo-upper "compra")]
@@ -111,7 +106,7 @@
   (calcular-saldo-acoes-puro @transacoes codigo))
 
 (defn data-compra-mais-antiga-wrapper
-  "Retorna a data da compra mais antiga de uma acao especifica, ou nil se nao houver compras (wrapper impuro)"
+  "Retorna a data da compra mais antiga de uma acao especifica"
   [codigo]
   (data-compra-mais-antiga @transacoes codigo))
 

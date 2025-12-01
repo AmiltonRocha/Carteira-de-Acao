@@ -1,7 +1,8 @@
 ;; Nesta pagina e a onde colocamos o codigo principal do projeto
 (ns gilsontrade.core
   (:require [clj-http.client :as http-client] ;; biblioteca para fazer requisicoes HTTP
-            [cheshire.core :as json]) ;; biblioteca para parsear JSON
+            [cheshire.core :as json] ;; biblioteca para parsear JSON
+            [clojure.string :as str]) ;; biblioteca para manipulacao de strings
   (:gen-class))
 
 (def api-local-url "http://localhost:3000") ;; URL da API local
@@ -95,6 +96,62 @@
     (catch Exception e
       {:erro (str "Erro ao conectar com o servidor: " (.getMessage e))})))
 
+(defn buscar-transacoes
+  "Busca todas as transacoes"
+  []
+  (try
+    (let [url (str api-local-url "/transacoes")
+          response (http-client/get url {:throw-exceptions false})
+          status (:status response)]
+      (if (= status 200)
+        (try
+          (let [transacoes (json/parse-string (:body response) true)]
+            transacoes)
+          (catch Exception e
+            {:erro (str "Erro ao processar resposta do servidor: " (.getMessage e))}))
+        {:erro (str "Erro HTTP " status " ao buscar transacoes.")}))
+    (catch Exception e
+      {:erro (str "Erro ao conectar com o servidor: " (.getMessage e))})))
+
+(defn buscar-transacoes-por-periodo
+  "Busca transacoes entre uma data inicial e final"
+  [data-inicial data-final]
+  (try
+    (let [url (str api-local-url "/transacoes/periodo?data-inicial=" data-inicial "&data-final=" data-final)
+          response (http-client/get url {:throw-exceptions false})
+          status (:status response)]
+      (if (= status 200)
+        (try
+          (let [transacoes (json/parse-string (:body response) true)]
+            transacoes)
+          (catch Exception e
+            {:erro (str "Erro ao processar resposta do servidor: " (.getMessage e))}))
+        (if-let [body (:body response)]
+          (try
+            (let [erro (json/parse-string body true)]
+              erro)
+            (catch Exception e
+              {:erro (str "Erro HTTP " status ". Resposta: " (subs body 0 (min 200 (count body))))}))
+          {:erro (str "Erro HTTP " status ". Sem resposta do servidor.")})))
+    (catch Exception e
+      {:erro (str "Erro ao conectar com o servidor: " (.getMessage e))})))
+
+(defn exibir-transacao
+  "Exibe os dados de uma transacao"
+  [transacao]
+  (println "\nTipo:" (:tipo transacao))
+  (println "Codigo:" (:codigo transacao))
+  (println "Quantidade:" (:quantidade transacao))
+  (println "Preco Unitario: R$" (:preco-unitario transacao))
+  (println "Valor Total: R$" (:valor-total transacao))
+  (println "Data:" (:data transacao))
+  (println "---"))
+
+(defn exibir-transacoes
+  "Exibe uma lista de transacoes"
+  [transacoes]
+  (run! exibir-transacao transacoes))
+
 (defn exibir-menu
   "Exibe o menu principal"
   []
@@ -182,6 +239,35 @@
                           (println "\nErro: Quantidade invalida. Digite um numero valido."))
                         (catch Exception ex
                           (println "\nErro inesperado:" (.getMessage ex))))
+                      true))
+    (= opcao "4") (do
+                    (print "Deseja filtrar por periodo? (s/n): ")
+                    (flush)
+                    (let [filtrar (read-line)]
+                      (if (= (str/lower-case filtrar) "s")
+                        (do
+                          (print "Digite a data inicial (formato: YYYY-MM-DD, ex: 2024-01-01): ")
+                          (flush)
+                          (let [data-inicial (read-line)]
+                            (print "Digite a data final (formato: YYYY-MM-DD, ex: 2024-12-31): ")
+                            (flush)
+                            (let [data-final (read-line)
+                                  resultado (buscar-transacoes-por-periodo data-inicial data-final)]
+                              (if-let [erro (:erro resultado)]
+                                (println "\nErro:" erro)
+                                (if (seq resultado)
+                                  (do
+                                    (println "\n=== Extrato de Transacoes (Periodo: " data-inicial " a " data-final ") ===")
+                                    (exibir-transacoes resultado))
+                                  (println "\nNenhuma transacao encontrada no periodo especificado."))))))
+                        (let [resultado (buscar-transacoes)]
+                          (if-let [erro (:erro resultado)]
+                            (println "\nErro:" erro)
+                            (if (seq resultado)
+                              (do
+                                (println "\n=== Extrato de Transacoes ===")
+                                (exibir-transacoes resultado))
+                              (println "\nNenhuma transacao encontrada.")))))
                       true))
     (= opcao "0") (do
                     (println "\nSaindo...")
