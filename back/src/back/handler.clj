@@ -75,6 +75,20 @@
         total-vendas (reduce + 0 (map :quantidade vendas))]
     (- total-compras total-vendas)))
 
+(defn obter-codigos-unicos
+  "Retorna uma lista de codigos unicos de acoes a partir das transacoes (funcao pura)"
+  [transacoes]
+  (distinct (map :codigo transacoes)))
+
+(defn calcular-saldo-todas-acoes-puro
+  "Calcula o saldo de todas as acoes a partir de uma lista de transacoes (funcao pura)"
+  [transacoes]
+  (let [codigos-unicos (obter-codigos-unicos transacoes)]
+    (map (fn [codigo]
+           {:codigo codigo
+            :quantidade (calcular-saldo-acoes-puro transacoes codigo)})
+         codigos-unicos)))
+
 (defn data-compra-mais-antiga
   "Retorna a data da compra mais antiga de uma acao a partir de uma lista de transacoes "
   [transacoes codigo]
@@ -104,6 +118,11 @@
   "Calcula quantas acoes de um codigo especifico o usuario possui"
   [codigo]
   (calcular-saldo-acoes-puro @transacoes codigo))
+
+(defn calcular-saldo-todas-acoes
+  "Calcula o saldo de todas as acoes na carteira"
+  []
+  (calcular-saldo-todas-acoes-puro @transacoes))
 
 (defn data-compra-mais-antiga-wrapper
   "Retorna a data da compra mais antiga de uma acao especifica"
@@ -198,24 +217,31 @@
             (response/status 400)))))
   (POST "/venda" {body :body}
     (try
-      (let [dados (json/parse-string (slurp body) true)
+      (let [body-str (if (string? body) body (slurp body))
+            dados (json/parse-string body-str true)
             codigo (:codigo dados)
             quantidade (:quantidade dados)
-            data (:data dados)  ;; Extrai a data do body (opcional)
-            transacao (registra-venda codigo quantidade data)]
-        (if-let [erro (:erro transacao)]
-          (-> {:erro erro}
+            data (:data dados)]  ;; Extrai a data do body (opcional)
+        (if (and codigo quantidade data)
+          (let [transacao (registra-venda codigo quantidade data)]
+            (if-let [erro (:erro transacao)]
+              (-> {:erro erro}
+                  json/generate-string
+                  response/response
+                  (response/content-type "application/json; charset=utf-8")
+                  (response/status 400))
+              (-> transacao
+                  json/generate-string
+                  response/response
+                  (response/content-type "application/json; charset=utf-8")
+                  (response/status 201))))
+          (-> {:erro "Dados invalidos. Envie: codigo, quantidade e data (formato: YYYY-MM-DD)"}
               json/generate-string
               response/response
               (response/content-type "application/json; charset=utf-8")
-              (response/status 400))
-          (-> transacao
-              json/generate-string
-              response/response
-              (response/content-type "application/json; charset=utf-8")
-              (response/status 201))))
-      (catch Exception _
-        (-> {:erro "Dados invalidos. Envie: codigo, quantidade e data (formato: YYYY-MM-DD)"}
+              (response/status 400))))
+      (catch Exception e
+        (-> {:erro (str "Dados invalidos. Envie: codigo, quantidade e data (formato: YYYY-MM-DD). Erro: " (.getMessage e))}
             json/generate-string
             response/response
             (response/content-type "application/json; charset=utf-8")
@@ -225,7 +251,11 @@
         json/generate-string
         response/response
         (response/content-type "application/json; charset=utf-8")))
-  
+  (GET "/saldo" []
+    (-> (calcular-saldo-todas-acoes)
+        json/generate-string
+        response/response
+        (response/content-type "application/json; charset=utf-8")))
   (GET "/transacoes/periodo" {query-params :query-params}
     (let [data-inicial (get query-params "data-inicial")
           data-final (get query-params "data-final")]

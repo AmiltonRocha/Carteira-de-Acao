@@ -136,6 +136,28 @@
     (catch Exception e
       {:erro (str "Erro ao conectar com o servidor: " (.getMessage e))})))
 
+(defn buscar-saldo-carteira
+  "Busca o saldo de todas as acoes na carteira"
+  []
+  (try
+    (let [url (str api-local-url "/saldo")
+          response (http-client/get url {:throw-exceptions false})
+          status (:status response)]
+      (if (= status 200)
+        (try
+          (let [saldos (json/parse-string (:body response) true)]
+            saldos)
+          (catch Exception e
+            {:erro (str "Erro ao processar resposta do servidor: " (.getMessage e))}))
+        {:erro (str "Erro HTTP " status " ao buscar saldo da carteira.")}))
+    (catch Exception e
+      {:erro (str "Erro ao conectar com o servidor: " (.getMessage e))})))
+
+(defn calcular-valor-total-acao
+  "Calcula o valor total de uma acao (quantidade * preco atual) (funcao pura)"
+  [quantidade preco-atual]
+  (* quantidade preco-atual))
+
 (defn exibir-transacao
   "Exibe os dados de uma transacao"
   [transacao]
@@ -150,7 +172,26 @@
 (defn exibir-transacoes
   "Exibe uma lista de transacoes"
   [transacoes]
-  (run! exibir-transacao transacoes))
+  (run! exibir-transacao transacoes)) ;; run! é uma função que executa uma função para cada elemento da lista
+;; sugestão de utilizar o recur para fazer a lista de transacoes
+
+(defn exibir-saldo-acao
+  "Exibe o saldo de uma acao com preco atual e valor total"
+  [saldo-acao]
+  (let [codigo (:codigo saldo-acao)
+        quantidade (:quantidade saldo-acao)]
+    (if (> quantidade 0)
+      (let [dados-acao (buscar-dados-acao codigo)]
+        (if (and dados-acao (not (:erro dados-acao)))
+          (if-let [preco-atual (:ultimo-preco dados-acao)]
+            (let [valor-total (calcular-valor-total-acao quantidade preco-atual)]
+              (println "\nCodigo:" codigo)
+              (println "Quantidade:" quantidade)
+              (println "Preco Atual: R$" preco-atual)
+              (println "Valor Total: R$" valor-total)
+              (println "---"))
+            (println "\nCodigo:" codigo " - Erro ao buscar preco atual"))
+          (println "\nCodigo:" codigo " - Erro ao buscar dados da acao"))))))
 
 (defn exibir-menu
   "Exibe o menu principal"
@@ -269,16 +310,38 @@
                                 (exibir-transacoes resultado))
                               (println "\nNenhuma transacao encontrada.")))))
                       true))
+    (= opcao "5") (do
+                    (println "\n=== Saldo da Carteira ===")
+                    (let [saldos (buscar-saldo-carteira)]
+                      (if-let [erro (:erro saldos)]
+                        (println "\nErro:" erro)
+                        (if (seq saldos)
+                          (do
+                            (println "\nAcoes na carteira:")
+                            (run! exibir-saldo-acao saldos)
+                            (let [valor-total-carteira (reduce + 0 (map (fn [saldo]
+                                                                           (let [codigo (:codigo saldo)
+                                                                                 quantidade (:quantidade saldo)
+                                                                                 dados-acao (buscar-dados-acao codigo)]
+                                                                             (if (and dados-acao (not (:erro dados-acao)) (> quantidade 0))
+                                                                               (if-let [preco-atual (:ultimo-preco dados-acao)]
+                                                                                 (calcular-valor-total-acao quantidade preco-atual)
+                                                                                 0)
+                                                                               0)))
+                                                                         saldos))]
+                              (println "\n=== Valor Total da Carteira: R$" valor-total-carteira " ===")))
+                          (println "\nNenhuma acao na carteira."))))
+                    true))
     (= opcao "0") (do
                     (println "\nSaindo...")
                     nil)
     :else (do
             (println "\nOpcao invalida! Tente novamente.")
-            true)))
+            true))
 
 (defn executar-menu
   "Executa o menu usando "
-  ([]
+  ([] 
    (executar-menu true))  ; <- inicia com true para começar o loop
   ([continuar]
    (if continuar
@@ -298,7 +361,7 @@
   (executar-menu)) 
 
 
-
+;; OBS PEGUNTAR PARA O GILSON SE POSSO USAR O SEQ OU EU SUBISITUO POR COUNT
 
 
 
