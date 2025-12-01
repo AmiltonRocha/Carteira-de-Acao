@@ -59,6 +59,42 @@
     (catch Exception e
       {:erro (str "Erro ao conectar com o servidor: " (.getMessage e))})))
 
+(defn registrar-venda
+  "Registra uma venda de acao"
+  [codigo quantidade data]
+  (try
+    (let [dados-acao (buscar-dados-acao codigo)]
+      (if (and dados-acao (not (:erro dados-acao)))
+        (if-let [preco-atual (:ultimo-preco dados-acao)]
+          (let [url (str api-local-url "/venda")
+                dados-json (json/generate-string {:codigo codigo
+                                                  :quantidade quantidade
+                                                  :data data})
+                response (http-client/post url {:body dados-json
+                                               :content-type "application/json"
+                                               :accept :json
+                                               :throw-exceptions false})
+                status (:status response)]
+            (if (= status 201)
+              (try
+                (let [resultado (json/parse-string (:body response) true)]
+                  resultado)
+                (catch Exception e
+                  {:erro (str "Erro ao processar resposta do servidor: " (.getMessage e))}))
+              (if-let [body (:body response)]
+                (try
+                  (let [erro (json/parse-string body true)]
+                    erro)
+                  (catch Exception e
+                    {:erro (str "Erro HTTP " status ". Resposta: " (subs body 0 (min 200 (count body))))}))
+                {:erro (str "Erro HTTP " status ". Sem resposta do servidor.")})))
+          {:erro (str "Preco da acao nao disponivel. Dados recebidos: " (pr-str dados-acao))})
+        (if-let [erro (:erro dados-acao)]
+          {:erro erro}
+          {:erro "Erro ao buscar dados da acao. Tente novamente."})))
+    (catch Exception e
+      {:erro (str "Erro ao conectar com o servidor: " (.getMessage e))})))
+
 (defn exibir-menu
   "Exibe o menu principal"
   []
@@ -110,6 +146,33 @@
                               (println "\nErro:" erro)
                               (do
                                 (println "\nCompra registrada com sucesso!")
+                                (println "Codigo:" (:codigo resultado))
+                                (println "Quantidade:" (:quantidade resultado))
+                                (println "Preco Unitario: R$" (:preco-unitario resultado))
+                                (println "Valor Total: R$" (:valor-total resultado))
+                                (println "Data:" (:data resultado))))))
+                        (catch NumberFormatException _
+                          (println "\nErro: Quantidade invalida. Digite um numero valido."))
+                        (catch Exception ex
+                          (println "\nErro inesperado:" (.getMessage ex))))
+                      true))
+    (= opcao "3") (do
+                    (print "Digite o codigo da acao: ")
+                    (flush)
+                    (let [codigo (read-line)]
+                      (print "Digite a quantidade: ")
+                      (flush)
+                      (try
+                        (let [quantidade-str (read-line)
+                              quantidade (Double/parseDouble quantidade-str)]
+                          (print "Digite a data da venda (formato: YYYY-MM-DD, ex: 2024-01-15): ")
+                          (flush)
+                          (let [data (read-line)
+                                resultado (registrar-venda codigo quantidade data)]
+                            (if-let [erro (:erro resultado)]
+                              (println "\nErro:" erro)
+                              (do
+                                (println "\nVenda registrada com sucesso!")
                                 (println "Codigo:" (:codigo resultado))
                                 (println "Quantidade:" (:quantidade resultado))
                                 (println "Preco Unitario: R$" (:preco-unitario resultado))

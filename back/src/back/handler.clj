@@ -34,11 +34,66 @@
           {:erro-api (str "Erro ao processar resposta da API: " (.getMessage e))}))
       {:erro-api (str "Erro HTTP " status " ao acessar API brapi.dev. Verifique se o codigo " codigo " esta correto.")})))
 
+(defn calcular-valor-total
+  "Calcula o valor total de uma transacao (funcao pura)"
+  [quantidade preco-unitario]
+  (* quantidade preco-unitario))
+
+(defn filtrar-transacoes
+  "Filtra transacoes por codigo e tipo (funcao pura)"
+  [transacoes codigo tipo]
+  (let [codigo-upper (.toUpperCase codigo)]
+    (filter #(and (= (:tipo %) tipo)
+                  (= (:codigo %) codigo-upper))
+            transacoes)))
+
+(defn data-anterior?
+  "Verifica se data1 e anterior a data2 (funcao pura)"
+  [data1 data2]
+  (< (compare data1 data2) 0))
+
+(defn data-posterior-ou-igual?
+  "Verifica se data1 e posterior ou igual a data2 (funcao pura)"
+  [data1 data2]
+  (>= (compare data1 data2) 0))
+
+(defn data-entre?
+  "Verifica se data esta entre data-inicial e data-final (inclusive) (funcao pura)"
+  [data data-inicial data-final]
+  (and (data-posterior-ou-igual? data data-inicial)
+       (data-posterior-ou-igual? data-final data)))
+
+(defn data-venda-valida?
+  "Valida se a data da venda e valida em relacao a data da compra mais antiga (funcao pura)"
+  [data-venda data-compra-antiga]
+  (if data-compra-antiga
+    (data-posterior-ou-igual? data-venda data-compra-antiga)
+    true))  ; Se nao ha compra, permite vender
+
+(defn calcular-saldo-acoes-puro
+  "Calcula o saldo de acoes a partir de uma lista de transacoes (funcao pura)"
+  [transacoes codigo]
+  (let [codigo-upper (.toUpperCase codigo)
+        compras (filtrar-transacoes transacoes codigo-upper "compra")
+        vendas (filtrar-transacoes transacoes codigo-upper "venda")
+        total-compras (reduce + 0 (map :quantidade compras))
+        total-vendas (reduce + 0 (map :quantidade vendas))]
+    (- total-compras total-vendas)))
+
+(defn data-compra-mais-antiga
+  "Retorna a data da compra mais antiga de uma acao a partir de uma lista de transacoes (funcao pura)"
+  [transacoes codigo]
+  (let [codigo-upper (.toUpperCase codigo)
+        compras (filtrar-transacoes transacoes codigo-upper "compra")]
+    (if (seq compras)
+      (apply min (map :data compras))
+      nil)))
+
 (defn registra-compra
   "Registra uma compra de acao e armazena no atom de transacoes"
   [codigo quantidade preco data]
   (let [codigo-upper (.toUpperCase codigo) ;; converte o codigo para maiuscula
-        valor-total (* quantidade preco) ;; calcula o valor total da compra
+        valor-total (calcular-valor-total quantidade preco) ;; calcula o valor total da compra
         ;; Usa a data fornecida, ou data atual se nao fornecida
         data-compra (if data data (str (java.time.LocalDate/now)))
         transacao {:tipo "compra"
@@ -53,37 +108,39 @@
 (defn calcular-saldo-acoes
   "Calcula quantas acoes de um codigo especifico o usuario possui"
   [codigo]
-  (let [codigo-upper (.toUpperCase codigo)
-        compras (filter #(and (= (:tipo %) "compra")
-                              (= (:codigo %) codigo-upper))
-                        @transacoes)
-        vendas (filter #(and (= (:tipo %) "venda")
-                             (= (:codigo %) codigo-upper))
-                       @transacoes)
-        total-compras (reduce + 0 (map :quantidade compras))
-        total-vendas (reduce + 0 (map :quantidade vendas))]
-    (- total-compras total-vendas)))
+  (calcular-saldo-acoes-puro @transacoes codigo))
+
+(defn data-compra-mais-antiga-wrapper
+  "Retorna a data da compra mais antiga de uma acao especifica, ou nil se nao houver compras (wrapper impuro)"
+  [codigo]
+  (data-compra-mais-antiga @transacoes codigo))
 
 (defn registra-venda
   "Registra uma venda de acao e armazena no atom de transacoes"
-  [codigo quantidade]
+  [codigo quantidade data]
   (let [codigo-upper (.toUpperCase codigo)
-        saldo-atual (calcular-saldo-acoes codigo-upper)
-        dados-acao (buscar-dados-acao codigo-upper)
-        preco-atual (:regularMarketPrice dados-acao)
-        valor-total (* quantidade preco-atual)
-        data-atual (str (java.time.LocalDate/now))
-        transacao {:tipo "venda"
-                   :codigo codigo-upper
-                   :quantidade quantidade
-                   :preco-unitario preco-atual
-                   :valor-total valor-total
-                   :data data-atual}]
-    (if (>= saldo-atual quantidade)
-      (do
-        (swap! transacoes conj transacao)
-        transacao)
-      {:erro (str "Saldo insuficiente. Voce possui " saldo-atual " acoes de " codigo-upper " e tentou vender " quantidade)})))
+        ;; Usa a data fornecida, ou data atual se nao fornecida
+        data-venda (if data data (str (java.time.LocalDate/now)))
+        ;; Valida se a data da venda nao e anterior a data da compra mais antiga
+        data-compra-antiga (data-compra-mais-antiga-wrapper codigo-upper)]
+    ;; Primeiro valida se existe compra e se a data da venda e valida
+    (if (not (data-venda-valida? data-venda data-compra-antiga))
+      {:erro (str "Nao e possivel vender antes da data de compra. Data da compra mais antiga: " data-compra-antiga "")}
+      (let [saldo-atual (calcular-saldo-acoes codigo-upper)
+            dados-acao (buscar-dados-acao codigo-upper)
+            preco-atual (:regularMarketPrice dados-acao)
+            valor-total (calcular-valor-total quantidade preco-atual)
+            transacao {:tipo "venda"
+                       :codigo codigo-upper
+                       :quantidade quantidade
+                       :preco-unitario preco-atual
+                       :valor-total valor-total
+                       :data data-venda}]
+        (if (>= saldo-atual quantidade)
+          (do
+            (swap! transacoes conj transacao)
+            transacao)
+          {:erro (str "Saldo insuficiente. Voce possui " saldo-atual " acoes de " codigo-upper " e tentou vender " quantidade)})))))
 
 (defn extrato-por-periodo
   "Filtra transacoes entre uma data inicial e uma data final (formato: YYYY-MM-DD)"
@@ -91,9 +148,7 @@
   (let [todas-transacoes @transacoes
         ;; Filtra transacoes cuja data esta entre data-inicial e data-final (inclusive)
         transacoes-filtradas (filter (fn [transacao]
-                                       (let [data-transacao (:data transacao)]
-                                         (and (>= (compare data-transacao data-inicial) 0)
-                                              (<= (compare data-transacao data-final) 0))))
+                                       (data-entre? (:data transacao) data-inicial data-final))
                                      todas-transacoes)]
     transacoes-filtradas))
 
@@ -142,6 +197,30 @@
             (response/status 201)))
       (catch Exception _
         (-> {:erro "Dados invalidos. Envie: codigo, quantidade, preco e data (formato: YYYY-MM-DD)"}
+            json/generate-string
+            response/response
+            (response/content-type "application/json; charset=utf-8")
+            (response/status 400)))))
+  (POST "/venda" {body :body}
+    (try
+      (let [dados (json/parse-string (slurp body) true)
+            codigo (:codigo dados)
+            quantidade (:quantidade dados)
+            data (:data dados)  ;; Extrai a data do body (opcional)
+            transacao (registra-venda codigo quantidade data)]
+        (if-let [erro (:erro transacao)]
+          (-> {:erro erro}
+              json/generate-string
+              response/response
+              (response/content-type "application/json; charset=utf-8")
+              (response/status 400))
+          (-> transacao
+              json/generate-string
+              response/response
+              (response/content-type "application/json; charset=utf-8")
+              (response/status 201))))
+      (catch Exception _
+        (-> {:erro "Dados invalidos. Envie: codigo, quantidade e data (formato: YYYY-MM-DD)"}
             json/generate-string
             response/response
             (response/content-type "application/json; charset=utf-8")
