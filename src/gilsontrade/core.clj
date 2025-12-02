@@ -335,8 +335,7 @@
     (= opcao "0") (do
                     (println "\nSaindo...")
                     nil)
-    :else (do
-            (println "\nOpcao invalida! Tente novamente.")
+    :else (do  
             true))
 
 (defn executar-menu
