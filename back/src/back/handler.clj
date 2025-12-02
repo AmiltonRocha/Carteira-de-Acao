@@ -68,10 +68,7 @@
 (defn data-posterior-ou-igual?
   "Verifica se data1 e posterior ou igual a data2 "
   [data1 data2]
-  (println "[data-posterior-ou-igual?] Comparando data1:" data1 "com data2:" data2)
-  (let [resultado (>= (compare data1 data2) 0)]
-    (println "[data-posterior-ou-igual?] Resultado:" resultado)
-    resultado))
+  (>= (compare data1 data2) 0))
 
 (defn data-entre?
   "Verifica se data esta entre data-inicial e data-final (inclusive) "
@@ -82,27 +79,19 @@
 (defn data-venda-valida?
   "Valida se a data da venda e valida em relacao a data da compra mais antiga "
   [data-venda data-compra-antiga]
-  (println "[data-venda-valida?] Validando - data-venda:" data-venda "data-compra-antiga:" data-compra-antiga)
   (if data-compra-antiga
-    (do
-      (println "[data-venda-valida?] Existe compra, verificando se data-venda e posterior ou igual...")
-      (data-posterior-ou-igual? data-venda data-compra-antiga))
-    (do
-      (println "[data-venda-valida?] Nao ha compra, permitindo venda")
-      true)))  ; Se nao ha compra, permite vender
+    (data-posterior-ou-igual? data-venda data-compra-antiga)
+    true))  ; Se nao ha compra, permite vender
 
 (defn calcular-saldo-acoes-puro
   "Calcula o saldo de acoes a partir de uma lista de transacoes "
   [transacoes codigo]
-  (println "[calcular-saldo-acoes-puro] Calculando saldo para codigo:" codigo)
   (let [codigo-upper (.toUpperCase codigo)
         compras (filtrar-transacoes transacoes codigo-upper "compra")
         vendas (filtrar-transacoes transacoes codigo-upper "venda")
         total-compras (reduce + 0 (map :quantidade compras))
-        total-vendas (reduce + 0 (map :quantidade vendas))
-        saldo (- total-compras total-vendas)]
-    (println "[calcular-saldo-acoes-puro] Total compras:" total-compras "Total vendas:" total-vendas "Saldo:" saldo)
-    saldo))
+        total-vendas (reduce + 0 (map :quantidade vendas))]
+    (- total-compras total-vendas)))
 
 (defn obter-codigos-unicos
   "Retorna uma lista de codigos unicos de acoes a partir das transacoes (funcao pura)"
@@ -121,17 +110,11 @@
 (defn data-compra-mais-antiga
   "Retorna a data da compra mais antiga de uma acao a partir de uma lista de transacoes "
   [transacoes codigo]
-  (println "[data-compra-mais-antiga] Buscando compra mais antiga para codigo:" codigo)
   (let [codigo-upper (.toUpperCase codigo)
         compras (filtrar-transacoes transacoes codigo-upper "compra")]
-    (println "[data-compra-mais-antiga] Compras encontradas:" (count compras) compras)
     (if (seq compras)
-      (let [data-mais-antiga (first (sort (map :data compras)))]
-        (println "[data-compra-mais-antiga] Data mais antiga encontrada:" data-mais-antiga)
-        data-mais-antiga)
-      (do
-        (println "[data-compra-mais-antiga] Nenhuma compra encontrada")
-        nil))))
+      (first (sort (map :data compras)))
+      nil)))
 
 (defn registra-compra
   "Registra uma compra de acao e armazena no atom de transacoes"
@@ -152,7 +135,6 @@
 (defn calcular-saldo-acoes
   "Calcula quantas acoes de um codigo especifico o usuario possui"
   [codigo]
-  (println "[calcular-saldo-acoes] Calculando saldo para codigo:" codigo)
   (calcular-saldo-acoes-puro @transacoes codigo))
 
 (defn calcular-saldo-todas-acoes
@@ -163,72 +145,46 @@
 (defn data-compra-mais-antiga-wrapper
   "Retorna a data da compra mais antiga de uma acao especifica"
   [codigo]
-  (println "[data-compra-mais-antiga-wrapper] Chamado para codigo:" codigo)
   (data-compra-mais-antiga @transacoes codigo))
 
 (defn registra-venda
   "Registra uma venda de acao e armazena no atom de transacoes"
   [codigo quantidade data]
-  (println "[registra-venda] Iniciando registro de venda - codigo:" codigo "quantidade:" quantidade "data:" data)
   ;; Valida se quantidade e um numero valido
   (if (not (and (number? quantidade) (> quantidade 0)))
-    (do
-      (println "[registra-venda] ERRO: Quantidade invalida")
-      {:erro (str "Quantidade invalida. Deve ser um numero maior que zero. Recebido: " quantidade " (tipo: " (type quantidade) ")")})
+    {:erro (str "Quantidade invalida. Deve ser um numero maior que zero. Recebido: " quantidade " (tipo: " (type quantidade) ")")}
     (let [codigo-upper (.toUpperCase codigo)
           ;; Garante que quantidade seja double
           quantidade-num (double quantidade)
           ;; Usa a data fornecida, ou data atual se nao fornecida
-          data-venda (if data data (str (java.time.LocalDate/now)))]
-      (println "[registra-venda] Dados processados - codigo-upper:" codigo-upper "quantidade-num:" quantidade-num "data-venda:" data-venda)
+          data-venda (if data data (str (java.time.LocalDate/now)))
+          ;; Valida se a data da venda nao e anterior a data da compra mais antiga DA ACAO ESPECIFICA
+          data-compra-antiga (data-compra-mais-antiga-wrapper codigo-upper)]
+    ;; Primeiro valida se existe compra da acao especifica
+    (if (nil? data-compra-antiga)
+      {:erro (str "Nao e possivel vender " codigo-upper " sem ter comprado antes. Registre uma compra primeiro.")}
       ;; Valida se a data da venda nao e anterior a data da compra mais antiga DA ACAO ESPECIFICA
-      (let [data-compra-antiga (data-compra-mais-antiga-wrapper codigo-upper)]
-        (println "[registra-venda] Buscando data da compra mais antiga...")
-        ;; Primeiro valida se existe compra da acao especifica
-        (if (nil? data-compra-antiga)
-          (do
-            (println "[registra-venda] ERRO: Nao existe compra da acao" codigo-upper)
-            {:erro (str "Nao e possivel vender " codigo-upper " sem ter comprado antes. Registre uma compra primeiro.")})
-          (do
-            (println "[registra-venda] Data da compra mais antiga encontrada:" data-compra-antiga)
-            ;; Valida se a data da venda nao e anterior a data da compra mais antiga DA ACAO ESPECIFICA
-            (if (not (data-venda-valida? data-venda data-compra-antiga))
-              (do
-                (println "[registra-venda] ERRO: Data da venda invalida")
-                {:erro (str "Nao e possivel vender " codigo-upper " antes da data de compra. Data da compra mais antiga de " codigo-upper ": " data-compra-antiga "")})
-              (do
-                (println "[registra-venda] Validacao de data OK, verificando saldo e dados da acao...")
-                (let [saldo-atual (calcular-saldo-acoes codigo-upper)
-                      dados-acao (buscar-dados-acao codigo-upper)]
-                  (println "[registra-venda] Saldo atual:" saldo-atual "dados-acao recebidos:" (not (nil? dados-acao)))
-                  (if (or (nil? dados-acao) (:erro-api dados-acao))
-                    (do
-                      (println "[registra-venda] ERRO: Falha ao buscar dados da acao")
-                      {:erro (str "Erro ao buscar dados da acao " codigo-upper ". Tente novamente.")})
-                    (let [preco-atual (:regularMarketPrice dados-acao)]
-                      (println "[registra-venda] Preco atual da acao:" preco-atual)
-                      (if (nil? preco-atual)
-                        (do
-                          (println "[registra-venda] ERRO: Preco nao disponivel")
-                          {:erro (str "Preco da acao " codigo-upper " nao disponivel. Tente novamente.")})
-                        (let [valor-total (calcular-valor-total quantidade-num preco-atual)
-                              transacao {:tipo "venda"
-                                         :codigo codigo-upper
-                                         :quantidade quantidade-num
-                                         :preco-unitario preco-atual
-                                         :valor-total valor-total
-                                         :data data-venda}]
-                          (println "[registra-venda] Valor total calculado:" valor-total)
-                          (println "[registra-venda] Verificando saldo suficiente... saldo-atual:" saldo-atual "quantidade:" quantidade-num)
-                          (if (>= saldo-atual quantidade-num)
-                            (do
-                              (println "[registra-venda] Saldo suficiente! Registrando transacao...")
-                              (swap! transacoes conj transacao)
-                              (println "[registra-venda] Venda registrada com sucesso!")
-                              transacao)
-                            (do
-                              (println "[registra-venda] ERRO: Saldo insuficiente")
-                              {:erro (str "Saldo insuficiente. Voce possui " saldo-atual " acoes de " codigo-upper " e tentou vender " quantidade-num)})))))))))))))))
+      (if (not (data-venda-valida? data-venda data-compra-antiga))
+        {:erro (str "Nao e possivel vender " codigo-upper " antes da data de compra. Data da compra mais antiga de " codigo-upper ": " data-compra-antiga "")}
+        (let [saldo-atual (calcular-saldo-acoes codigo-upper)
+              dados-acao (buscar-dados-acao codigo-upper)]
+        (if (or (nil? dados-acao) (:erro-api dados-acao))
+          {:erro (str "Erro ao buscar dados da acao " codigo-upper ". Tente novamente.")}
+          (let [preco-atual (:regularMarketPrice dados-acao)]
+            (if (nil? preco-atual)
+              {:erro (str "Preco da acao " codigo-upper " nao disponivel. Tente novamente.")}
+              (let [valor-total (calcular-valor-total quantidade-num preco-atual)
+                    transacao {:tipo "venda"
+                               :codigo codigo-upper
+                               :quantidade quantidade-num
+                               :preco-unitario preco-atual
+                               :valor-total valor-total
+                               :data data-venda}]
+                (if (>= saldo-atual quantidade-num)
+                  (do
+                    (swap! transacoes conj transacao)
+                    transacao)
+                  {:erro (str "Saldo insuficiente. Voce possui " saldo-atual " acoes de " codigo-upper " e tentou vender " quantidade-num)})))))))))))
 
 (defn extrato-por-periodo
   "Filtra transacoes entre uma data inicial e uma data final (formato: YYYY-MM-DD)"
