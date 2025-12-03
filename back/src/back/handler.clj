@@ -5,8 +5,7 @@
                [ring.middleware.defaults :refer [wrap-defaults site-defaults api-defaults]]
                [clj-http.client :as http-client]
                [cheshire.core :as json]
-               [ring.util.response :as response]
-               [clojure.string :as str]))
+               [ring.util.response :as response]))
 
    (def key-api "g967zghLxWPwMp72fdAaFU")
    (def api-url "https://brapi.dev/api/quote/")
@@ -37,19 +36,7 @@
          (println "[ERRO] Erro ao converter timestamp:" timestamp "Erro:" (.getMessage e))
          nil)))
 
-   (defn data-para-timestamp
-     "Converte string YYYY-MM-DD para timestamp Unix (inicio do dia)"
-     [data-str]
-     (try
-       (-> (java.time.LocalDate/parse data-str)
-           (.atStartOfDay (java.time.ZoneId/of "America/Sao_Paulo"))
-           .toInstant
-           .getEpochSecond)
-       (catch Exception e
-         (println "Erro ao converter data:" data-str (.getMessage e))
-         nil)))
-
-   (defn data-e-hoje?
+  (defn data-e-hoje?
      "Verifica se uma data (string no formato YYYY-MM-DD) e igual a data de hoje"
      [data]
      (= data (str (java.time.LocalDate/now))))
@@ -206,6 +193,22 @@
         total-vendas (reduce + 0 (map :quantidade vendas))]
     (- total-compras total-vendas)))
 
+(defn calcular-saldo-ate-data
+  "Calcula o saldo de acoes ate uma data especifica (funcao pura)"
+  [transacoes codigo data-limite]
+  (let [codigo-upper (.toUpperCase codigo)
+        ;; Filtra apenas transacoes ANTERIORES à data limite (não inclui transacoes na mesma data!)
+        transacoes-anteriores (filter (fn [t]
+                                        (and (= (:codigo t) codigo-upper)
+                                             (neg? (compare (:data t) data-limite))))
+                                      transacoes)
+        compras (filter #(= (:tipo %) "compra") transacoes-anteriores)
+        vendas (filter #(= (:tipo %) "venda") transacoes-anteriores)
+        total-compras (reduce + 0 (map :quantidade compras))
+        total-vendas (reduce + 0 (map :quantidade vendas))
+        saldo (- total-compras total-vendas)]
+    saldo))
+
 (defn obter-codigos-unicos
   "Retorna uma lista de codigos unicos de acoes a partir das transacoes (funcao pura)"
   [transacoes]
@@ -274,7 +277,7 @@
         {:erro (str "Nao e possivel vender " codigo-upper " sem ter comprado antes. Registre uma compra primeiro.")}
         (if (not (data-venda-valida? data-venda data-compra-antiga))
           {:erro (str "Nao e possivel vender " codigo-upper " antes da data de compra. Data da compra mais antiga de " codigo-upper ": " data-compra-antiga)}
-          (let [saldo-atual (calcular-saldo-acoes codigo-upper)
+          (let [saldo-atual (calcular-saldo-ate-data @transacoes codigo-upper data-venda)
                 dados-acao (buscar-dados-acao codigo-upper :data data-venda)]
             (if (or (nil? dados-acao) (:erro-api dados-acao))
               {:erro (str "Erro ao buscar dados da acao " codigo-upper ". " (or (:erro-api dados-acao) "Tente novamente."))}
@@ -449,6 +452,15 @@
             response/response
             (response/content-type "application/json; charset=utf-8")
             (response/status 400)))))
+
+  ;; ✅ NOVA ROTA: Limpar todas as transações (apenas para testes!)
+  (DELETE "/transacoes" []
+    (do
+      (reset! transacoes [])
+      (-> {:mensagem "Todas as transacoes foram removidas"}
+          json/generate-string
+          response/response
+          (response/content-type "application/json; charset=utf-8"))))
 
   (route/not-found "Not Found"))
 
