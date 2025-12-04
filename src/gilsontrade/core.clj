@@ -383,7 +383,7 @@
 
    (= opcao "0") (do
                    (println "\nSaindo...")
-                   nil)
+                   (System/exit 0))
 
    :else (do 
            true))

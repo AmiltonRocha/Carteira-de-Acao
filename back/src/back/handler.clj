@@ -6,15 +6,12 @@
                [clj-http.client :as http-client]
                [cheshire.core :as json]
                [ring.util.response :as response]))
-
+     ;; ===== PEGANDO A API DO BANCO DE DADOS =====
    (def key-api "g967zghLxWPwMp72fdAaFU")
    (def api-url "https://brapi.dev/api/quote/")
-
-   ;; Atom para armazenar as transacoes em memoria
+   ;; ===== ATOM PARA ARMAZENAR AS TRANSAÇÕES EM MEMÓRIA =====
    (def transacoes (atom []))
-
    ;; ===== FUNÇÕES DE CONVERSÃO DE DATA =====
-
    (defn timestamp-para-data
      "Converte timestamp Unix (em SEGUNDOS) para string YYYY-MM-DD"
      [timestamp]
@@ -32,16 +29,15 @@
                            .toLocalDate
                            str)]
          resultado)
-       (catch Exception e
-         (println "[ERRO] Erro ao converter timestamp:" timestamp "Erro:" (.getMessage e))
-         nil)))
+      (catch Exception _
+        nil)))
 
   (defn data-e-hoje?
      "Verifica se uma data (string no formato YYYY-MM-DD) e igual a data de hoje"
      [data]
      (= data (str (java.time.LocalDate/now))))
 
-   (defn data-no-passado-ou-hoje?
+   (defn data-no-passado-ou-hoje? 
      "Verifica se a data não é futura"
      [data-str]
      (try
@@ -56,6 +52,7 @@
    (defn buscar-dados-historicos
      "Busca dados historicos de uma acao na API brapi.dev usando range e interval"
      [codigo-acao range interval]
+     ;; range e intervalo sao os parametros que eu vou passar para a API para buscar os dados historicos
      (let [codigo (.toUpperCase codigo-acao)
            url-completa (str api-url codigo "?range=" range "&interval=" interval)
            response (http-client/get url-completa {:headers {"Authorization" (str "Bearer " key-api)}
